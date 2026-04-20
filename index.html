@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Desert Strike — Helicopter Game</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1a1208; overflow: hidden; font-family: 'Courier New', monospace; color: #e8d49a; }
+    #canvas { display: block; cursor: crosshair; }
+
+    #ui { position: fixed; top: 0; left: 0; right: 0; pointer-events: none; }
+    #hud { padding: 12px 16px; display: flex; gap: 20px; align-items: flex-start; }
+    .hud-box { background: rgba(0,0,0,0.6); border: 1px solid #5a4a1a; border-radius: 6px; padding: 8px 12px; min-width: 100px; }
+    .hud-label { font-size: 10px; color: #8a7a3a; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+    .hud-value { font-size: 20px; font-weight: bold; color: #e8d49a; }
+    .hud-value.green { color: #5fe85a; }
+    .hud-value.red { color: #e85a5a; }
+
+    #health-bar-wrap { display: flex; align-items: center; gap: 8px; }
+    #health-bar-bg { width: 120px; height: 10px; background: #2a1a08; border: 1px solid #5a4a1a; border-radius: 3px; overflow: hidden; }
+    #health-bar { height: 100%; background: #5fe85a; transition: width 0.2s, background 0.2s; border-radius: 3px; }
+
+    #crosshair { position: fixed; pointer-events: none; transform: translate(-50%, -50%); width: 24px; height: 24px; }
+    #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255,80,80,0.8); }
+    #crosshair::before { width: 2px; height: 24px; left: 11px; top: 0; }
+    #crosshair::after { width: 24px; height: 2px; left: 0; top: 11px; }
+    #crosshair-ring { position: fixed; pointer-events: none; transform: translate(-50%, -50%); width: 32px; height: 32px; border: 1px solid rgba(255,80,80,0.5); border-radius: 50%; }
+
+    #minimap { position: fixed; bottom: 16px; right: 16px; border: 1px solid #5a4a1a; border-radius: 4px; background: rgba(0,0,0,0.7); }
+
+    #kill-feed { position: fixed; top: 80px; right: 16px; width: 220px; }
+    .kill-msg { background: rgba(0,0,0,0.6); border-left: 3px solid #e85a5a; padding: 4px 8px; margin-bottom: 4px; font-size: 11px; border-radius: 0 4px 4px 0; animation: fadeIn 0.2s; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; } }
+
+    #leaderboard { position: fixed; bottom: 16px; left: 16px; background: rgba(0,0,0,0.7); border: 1px solid #5a4a1a; border-radius: 6px; padding: 10px 14px; min-width: 180px; }
+    #leaderboard h3 { font-size: 11px; color: #8a7a3a; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .lb-row { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; margin-bottom: 3px; }
+    .lb-name { color: #e8d49a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100px; }
+    .lb-score { color: #f0c040; }
+
+    #overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 100; }
+    #overlay-box { text-align: center; background: rgba(20,15,5,0.95); border: 1px solid #5a4a1a; border-radius: 12px; padding: 40px 50px; max-width: 420px; }
+    #overlay-box h1 { font-size: 32px; color: #f0c040; margin-bottom: 8px; letter-spacing: 2px; }
+    #overlay-box p { color: #8a7a5a; font-size: 13px; margin-bottom: 24px; line-height: 1.6; }
+    #name-input { background: rgba(0,0,0,0.5); border: 1px solid #5a4a1a; border-radius: 6px; padding: 10px 14px; color: #e8d49a; font-size: 16px; font-family: inherit; width: 200px; text-align: center; margin-bottom: 16px; }
+    #name-input:focus { outline: none; border-color: #f0c040; }
+    #start-btn { background: #f0c040; color: #1a1208; border: none; border-radius: 6px; padding: 12px 32px; font-size: 16px; font-family: inherit; font-weight: bold; cursor: pointer; letter-spacing: 1px; transition: background 0.2s; }
+    #start-btn:hover { background: #ffe060; }
+    .controls-hint { color: #6a5a3a; font-size: 11px; line-height: 1.8; }
+
+    #respawn-msg { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; pointer-events: none; }
+    #respawn-msg span { background: rgba(0,0,0,0.8); border: 1px solid #e85a5a; color: #e85a5a; padding: 10px 24px; border-radius: 6px; font-size: 18px; }
+
+    #ammo-indicator { display: flex; gap: 4px; align-items: center; }
+    .ammo-icon { width: 8px; height: 14px; border-radius: 2px; }
+    .ammo-bullet { background: #e8e890; }
+    .ammo-rocket { background: #e85a20; width: 10px; height: 10px; border-radius: 50%; }
+  </style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<div id="ui">
+  <div id="hud">
+    <div class="hud-box">
+      <div class="hud-label">Zdraví</div>
+      <div id="health-bar-wrap">
+        <div id="health-bar-bg"><div id="health-bar" style="width:100%"></div></div>
+        <span id="hp-value" class="hud-value green">100</span>
+      </div>
+    </div>
+    <div class="hud-box">
+      <div class="hud-label">Skóre</div>
+      <div id="score-value" class="hud-value">0</div>
+    </div>
+    <div class="hud-box">
+      <div class="hud-label">Zabití</div>
+      <div id="kills-value" class="hud-value">0</div>
+    </div>
+    <div class="hud-box">
+      <div class="hud-label">Bunkry</div>
+      <div id="bunkers-value" class="hud-value">0</div>
+    </div>
+    <div class="hud-box" id="ammo-box">
+      <div class="hud-label">Munice</div>
+      <div id="ammo-indicator"></div>
+    </div>
+  </div>
+</div>
+
+<div id="crosshair"></div>
+<div id="crosshair-ring"></div>
+<canvas id="minimap" width="150" height="100"></canvas>
+<div id="kill-feed"></div>
+<div id="leaderboard"><h3>Žebříček</h3><div id="lb-rows"></div></div>
+
+<div id="overlay">
+  <div id="overlay-box">
+    <h1>🚁 DESERT STRIKE</h1>
+    <p>Poušť čeká na tvou helikoptéru.</p>
+    <input id="name-input" type="text" placeholder="Jméno pilota" maxlength="16">
+    <br>
+    <button id="start-btn">NASTOUPIT</button>
+    <br><br>
+    <div class="controls-hint">
+      W/S — dopředu / dozadu &nbsp;|&nbsp; A/D — otočení (tank turn)<br>
+      Levý klik — střelba &nbsp;|&nbsp; Pravý klik na bunkr — raketa<br>
+      Myš — míří helikoptéra
+    </div>
+  </div>
+</div>
+
+<div id="respawn-msg"><span>Zničena! Respawn za chvíli...</span></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/game.js"></script>
+</body>
+</html>
