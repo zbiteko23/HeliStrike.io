@@ -391,4 +391,14 @@ app.get('/api/leaderboard', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
+app.get('/test-supabase', async (req, res) => {
+  const { data, error } = await supabase
+    .from('scores')
+    .select('*')
+    .limit(1);
+
+  res.json({ data, error });
+});
+
 server.listen(PORT, () => console.log(`Heli-game server running on port ${PORT}`));
